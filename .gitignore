@@ -1,0 +1,10 @@
+build/
+dist/
+nbproject/private/
+.generated_files/
+*.o
+*.hex
+*.lst
+*.cof
+*.d
+*.p1
