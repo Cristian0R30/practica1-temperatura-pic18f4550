@@ -1,0 +1,119 @@
+;=============================================================================
+; PRÁCTICA 1: SISTEMA DE SUPERVISIÓN DE TEMPERATURA
+; Dispositivo: PIC18F4550
+; Ensamblador: MPLAB XC8 (pic-as)
+; Frecuencia de reloj: 8 MHz (Oscilador Interno)
+;=============================================================================
+#include <xc.inc>
+
+; --- BITS DE CONFIGURACIÓN ---
+CONFIG FOSC = INTOSCIO_EC   ; Oscilador interno, pin RA6 como E/S digital
+CONFIG WDT = OFF            ; Watchdog Timer deshabilitado
+CONFIG MCLRE = ON           ; Pin MCLR habilitado
+CONFIG LVP = OFF            ; Programación en bajo voltaje deshabilitada
+CONFIG PBADEN = OFF         ; RB0:RB4 inician como pines digitales
+
+; --- DEFINICIÓN DE VARIABLES EN MEMORIA RAM (ACCESS BANK) ---
+PSECT udata_acs
+Flags:          DS 1        ; Bit 0: Flag de muestreo de Timer0
+Modo_Escala:    DS 1        ; 0 = Celsius (°C), 1 = Fahrenheit (°F)
+Temp_ADC_H:     DS 1        ; Byte alto de lectura ADC
+Temp_ADC_L:     DS 1        ; Byte bajo de lectura ADC
+Temp_C:         DS 1        ; Temperatura calculada en °C
+Temp_F:         DS 1        ; Temperatura calculada en °F
+Temp_Disp:      DS 1        ; Valor numérico a desplegar (0 a 99)
+Dig_Dec:        DS 1        ; BCD decena
+Dig_Uni:        DS 1        ; BCD unidad
+Seg_Dec:        DS 1        ; Patrón 7 segmentos decena
+Seg_Uni:        DS 1        ; Patrón 7 segmentos unidad
+Temp_Val:       DS 1        ; Variable auxiliar de resta BCD
+DivH:           DS 1        ; Variable auxiliar para cálculo °F
+DivL:           DS 1        ; Variable auxiliar para cálculo °F
+Cociente:       DS 1        ; Variable auxiliar división °F
+Retardo1:       DS 1        ; Retardo de multiplexado
+Retardo2:       DS 1        ; Retardo de multiplexado
+
+
+
+; --- VECTOR DE INTERRUPCIÓN DE ALTA PRIORIDAD (0x0008) ---
+PSECT isrVec, class=CODE, reloc=2
+ORG 0x0008
+; --- CÓDIGO PRINCIPAL ---
+PSECT main_code, class=CODE, reloc=2
+
+Inicio:
+    ; 1. Configurar oscilador a 8 MHz
+    MOVLW 0x72              ; IRCF = 111 (8 MHz), SCS = 10 (reloj interno)
+    MOVWF OSCCON, c
+
+    ; 2. Configuración de puertos de E/S
+    ; RA0 como entrada analógica (LM35)
+    BSF TRISA, 0, c
+    ; RB0, RB1, RB2 como entradas de interrupción
+    BSF TRISB, 0, c
+    BSF TRISB, 1, c
+    BSF TRISB, 2, c
+    ; PORTC como salidas: RC0 (LED Alarma), RC1 (Ventilador), RC2 (D1), RC3 (D2)
+    CLRF TRISC, c
+    CLRF LATC, c
+    ; PORTD completo como salida (Segmentos a-g)
+    CLRF TRISD, c
+    CLRF LATD, c
+
+    ; 3. Configuración de Resistencias Pull-Up en PORTB
+    BCF INTCON2, 7, c       ; nRBPU = 0 (Pull-ups internos habilitados)
+
+    ; 4. Configuración del Módulo ADC
+    ; ADCON1: AN0 como analógico, resto como digitales. Vref+ = VDD, Vref- = VSS
+    MOVLW 0x0E
+    MOVWF ADCON1, c
+    ; ADCON2: Justificación a la derecha, 8 TAD de adquisición, Fosc/16
+    MOVLW 0xA5
+    MOVWF ADCON2, c
+    ; ADCON0: Canal AN0 seleccionado, módulo ADC encendido
+    MOVLW 0x01
+    MOVWF ADCON0, c
+
+    ; 5. Configuración del Timer0 (Temporizador de muestreo ~500 ms)
+    ; T0CON: 16 bits, reloj interno Fosc/4, prescaler 1:256, Timer0 encendido
+    MOVLW 0x87
+    MOVWF T0CON, c
+    ; Precarga para 500 ms (0xF0BE)
+    MOVLW 0xF0
+    MOVWF TMR0H, c
+    MOVLW 0xBE
+    MOVWF TMR0L, c
+
+    ; 6. Configuración de Interrupciones
+    BCF RCON, 7, c          ; IPEN = 0 (Modo de compatibilidad / Sin prioridades)
+
+    ; Flancos de bajada para pulsadores (activo en bajo con pull-up)
+    BCF INTCON2, 6, c       ; INTEDG0 = 0 (Flanco de bajada RB0)
+    BCF INTCON2, 5, c       ; INTEDG1 = 0 (Flanco de bajada RB1)
+    BCF INTCON2, 4, c       ; INTEDG2 = 0 (Flanco de bajada RB2)
+
+    ; Limpieza de banderas de interrupción
+    BCF INTCON, 1, c        ; INT0IF = 0
+    BCF INTCON3, 0, c       ; INT1IF = 0
+    BCF INTCON3, 1, c       ; INT2IF = 0
+    BCF INTCON, 2, c        ; TMR0IF = 0
+
+    ; Habilitación de interrupciones individuales
+    BSF INTCON, 4, c        ; INT0IE = 1
+    BSF INTCON3, 3, c       ; INT1IE = 1
+    BSF INTCON3, 4, c       ; INT2IE = 1
+    BSF INTCON, 5, c        ; TMR0IE = 1
+
+    ; Habilitación global de interrupciones
+    BSF INTCON, 6, c        ; PEIE = 1
+    BSF INTCON, 7, c        ; GIE = 1
+
+    ; 7. Inicialización de variables
+    CLRF Flags, c
+    CLRF Modo_Escala, c     ; Modo por defecto: °C
+    CLRF Temp_C, c
+    CLRF Temp_F, c
+    CLRF Seg_Dec, c
+    CLRF Seg_Uni, c
+
+    

@@ -30,12 +30,12 @@ ifeq ($(TYPE_IMAGE), DEBUG_RUN)
 IMAGE_TYPE=debug
 OUTPUT_SUFFIX=hex
 DEBUGGABLE_SUFFIX=elf
-FINAL_IMAGE=${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+FINAL_IMAGE=${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
 else
 IMAGE_TYPE=production
 OUTPUT_SUFFIX=hex
 DEBUGGABLE_SUFFIX=elf
-FINAL_IMAGE=${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+FINAL_IMAGE=${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
 endif
 
 ifeq ($(COMPARE_BUILD), true)
@@ -51,17 +51,17 @@ OBJECTDIR=build/${CND_CONF}/${IMAGE_TYPE}
 DISTDIR=dist/${CND_CONF}/${IMAGE_TYPE}
 
 # Source Files Quoted if spaced
-SOURCEFILES_QUOTED_IF_SPACED=MAIn.s
+SOURCEFILES_QUOTED_IF_SPACED=main.s
 
 # Object Files Quoted if spaced
-OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/MAIn.o
-POSSIBLE_DEPFILES=${OBJECTDIR}/MAIn.o.d
+OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/main.o
+POSSIBLE_DEPFILES=${OBJECTDIR}/main.o.d
 
 # Object Files
-OBJECTFILES=${OBJECTDIR}/MAIn.o
+OBJECTFILES=${OBJECTDIR}/main.o
 
 # Source Files
-SOURCEFILES=MAIn.s
+SOURCEFILES=main.s
 
 
 
@@ -82,28 +82,28 @@ FIXDEPS=fixDeps
 ifneq ($(INFORMATION_MESSAGE), )
 	@echo $(INFORMATION_MESSAGE)
 endif
-	${MAKE}  -f nbproject/Makefile-default.mk ${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+	${MAKE}  -f nbproject/Makefile-default.mk ${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
 
 MP_PROCESSOR_OPTION=PIC18F4550
-FINAL_IMAGE_NAME_MINUS_EXTENSION=${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}
+FINAL_IMAGE_NAME_MINUS_EXTENSION=${DISTDIR}/proyecto.X.${IMAGE_TYPE}
 # ------------------------------------------------------------------------------------
 # Rules for buildStep: pic-as-assembler
 ifeq ($(TYPE_IMAGE), DEBUG_RUN)
-${OBJECTDIR}/MAIn.o: MAIn.s  nbproject/Makefile-${CND_CONF}.mk 
+${OBJECTDIR}/main.o: main.s  nbproject/Makefile-${CND_CONF}.mk 
 	@${MKDIR} "${OBJECTDIR}" 
-	@${RM} ${OBJECTDIR}/MAIn.o 
+	@${RM} ${OBJECTDIR}/main.o 
 	${MP_AS} -mcpu=PIC18F4550 -c \
-	-o ${OBJECTDIR}/MAIn.o \
-	MAIn.s \
+	-o ${OBJECTDIR}/main.o \
+	main.s \
 	 -D__DEBUG=1   -mdfp="${DFP_DIR}/xc8"  -misa=std -msummary=+mem,-psect,-class,-hex,-file,-sha1,-sha256,-xml,-xmlfull -fmax-errors=20 -mwarn=0 -xassembler-with-cpp
 	
 else
-${OBJECTDIR}/MAIn.o: MAIn.s  nbproject/Makefile-${CND_CONF}.mk 
+${OBJECTDIR}/main.o: main.s  nbproject/Makefile-${CND_CONF}.mk 
 	@${MKDIR} "${OBJECTDIR}" 
-	@${RM} ${OBJECTDIR}/MAIn.o 
+	@${RM} ${OBJECTDIR}/main.o 
 	${MP_AS} -mcpu=PIC18F4550 -c \
-	-o ${OBJECTDIR}/MAIn.o \
-	MAIn.s \
+	-o ${OBJECTDIR}/main.o \
+	main.s \
 	  -mdfp="${DFP_DIR}/xc8"  -misa=std -msummary=+mem,-psect,-class,-hex,-file,-sha1,-sha256,-xml,-xmlfull -fmax-errors=20 -mwarn=0 -xassembler-with-cpp
 	
 endif
@@ -111,16 +111,16 @@ endif
 # ------------------------------------------------------------------------------------
 # Rules for buildStep: pic-as-linker
 ifeq ($(TYPE_IMAGE), DEBUG_RUN)
-${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}: ${OBJECTFILES}  nbproject/Makefile-${CND_CONF}.mk    
+${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}: ${OBJECTFILES}  nbproject/Makefile-${CND_CONF}.mk    
 	@${MKDIR} ${DISTDIR} 
 	${MP_LD} -mcpu=PIC18F4550 ${OBJECTFILES_QUOTED_IF_SPACED} \
-	-o ${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX} \
+	-o ${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX} \
 	 -D__DEBUG=1   -mdfp="${DFP_DIR}/xc8"  -misa=std -msummary=+mem,-psect,-class,-hex,-file,-sha1,-sha256,-xml,-xmlfull -mcallgraph=std -Wl,-Map=${FINAL_IMAGE_NAME_MINUS_EXTENSION}.map -mno-download-hex
 else
-${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}: ${OBJECTFILES}  nbproject/Makefile-${CND_CONF}.mk   
+${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}: ${OBJECTFILES}  nbproject/Makefile-${CND_CONF}.mk   
 	@${MKDIR} ${DISTDIR} 
 	${MP_LD} -mcpu=PIC18F4550 ${OBJECTFILES_QUOTED_IF_SPACED} \
-	-o ${DISTDIR}/PROYECTO-S.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX} \
+	-o ${DISTDIR}/proyecto.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX} \
 	  -mdfp="${DFP_DIR}/xc8"  -misa=std -msummary=+mem,-psect,-class,-hex,-file,-sha1,-sha256,-xml,-xmlfull -mcallgraph=std -Wl,-Map=${FINAL_IMAGE_NAME_MINUS_EXTENSION}.map -mno-download-hex
 endif
 
