@@ -40,7 +40,26 @@ PSECT isrVec, class=CODE, reloc=2
 ORG 0x0008
 ; --- CÓDIGO PRINCIPAL ---
 PSECT main_code, class=CODE, reloc=2
+; --- VECTOR DE RESET ---
+PSECT resetVec, class=CODE, reloc=2
+ORG 0x0000
+resetVec:
+    GOTO Inicio
 
+; --- VECTOR DE INTERRUPCIÓN DE ALTA PRIORIDAD (0x0008) ---
+PSECT isrVec, class=CODE, reloc=2
+ORG 0x0008
+isrVec:
+    GOTO ISR_General
+
+; --- TABLA DE CARACTERES: DISPLAY 7 SEGMENTOS (CÁTODO COMÚN) ---
+; Patrones en orden 0-9: a, b, c, d, e, f, g (bits 0 a 6)
+PSECT const_data, class=CONST, reloc=2
+Tabla_7Seg:
+    DB 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
+
+; --- CÓDIGO PRINCIPAL ---
+PSECT main_code, class=CODE, reloc=2
 Inicio:
     ; 1. Configurar oscilador a 8 MHz
     MOVLW 0x72              ; IRCF = 111 (8 MHz), SCS = 10 (reloj interno)
@@ -115,5 +134,49 @@ Inicio:
     CLRF Temp_F, c
     CLRF Seg_Dec, c
     CLRF Seg_Uni, c
+; --- BUCLE PRINCIPAL (MULTIPLEXADO DE DISPLAYS) ---
+
+;=============================================================================
+; RUTINA DE INTERRUPCIÓN GENERAL (ISR)
+;=============================================================================
+ISR_General:
+    ; --- Verificación de INT0 (Alarma manual - RB0) ---
+    BTFSS INTCON, 1, c
+    GOTO Test_INT1
+    BCF INTCON, 1, c        ; Limpiar bandera INT0IF
+    BTG LATC, 0, c          ; Alternar estado del LED de Alarma
+    RETFIE 1
+
+Test_INT1:
+    ; --- Verificación de INT1 (Ventilador manual - RB1) ---
+    BTFSS INTCON3, 0, c
+    GOTO Test_INT2
+    BCF INTCON3, 0, c       ; Limpiar bandera INT1IF
+    BTG LATC, 1, c          ; Alternar estado del Ventilador
+    RETFIE 1
+
+Test_INT2:
+    ; --- Verificación de INT2 (Cambio de Escala °C / °F - RB2) ---
+    BTFSS INTCON3, 1, c
+    GOTO Test_TMR0
+    BCF INTCON3, 1, c       ; Limpiar bandera INT2IF
+    BTG Modo_Escala, 0, c   ; Alternar entre 0 (°C) y 1 (°F)
+    
+    RETFIE 1
+
+Test_TMR0:
+    ; --- Verificación de Timer0 (Período de muestreo) ---
+    BTFSS INTCON, 2, c
+    GOTO Fin_ISR
+    BCF INTCON, 2, c        ; Limpiar bandera TMR0IF
+    ; Recargar Timer0 para los siguientes 500 ms
+    MOVLW 0xF0
+    MOVWF TMR0H, c
+    MOVLW 0xBE
+    MOVWF TMR0L, c
+    BSF Flags, 0, c         ; Solicitar muestreo al bucle principal
+
+Fin_ISR:
+    RETFIE 1
 
     
