@@ -135,6 +135,22 @@ Inicio:
     CLRF Seg_Dec, c
     CLRF Seg_Uni, c
 ; --- BUCLE PRINCIPAL (MULTIPLEXADO DE DISPLAYS) ---
+    
+    
+;=============================================================================
+; ADQUISICIÓN Y CONVERSIÓN DE TEMPERATURA
+;=============================================================================
+
+    CALL Adquirir_Temperatura
+
+Bucle_Principal:
+    BTFSS Flags, 0, c
+    GOTO Bucle_Principal
+
+    BCF Flags, 0, c
+    CALL Adquirir_Temperatura
+    GOTO Bucle_Principal
+
 
 ;=============================================================================
 ; RUTINA DE INTERRUPCIÓN GENERAL (ISR)
@@ -179,4 +195,66 @@ Test_TMR0:
 Fin_ISR:
     RETFIE 1
 
-    
+
+;=============================================================================
+; ADQUISICIÓN DE TEMPERATURA
+;=============================================================================
+
+Adquirir_Temperatura:
+
+    BSF ADCON0, 1, c
+
+Espera_ADC:
+    BTFSC ADCON0, 1, c
+    GOTO Espera_ADC
+
+    MOVF ADRESH, W, c
+    MOVWF Temp_ADC_H, c
+
+    MOVF ADRESL, W, c
+    MOVWF Temp_ADC_L, c
+
+    BCF STATUS, 0, c
+    RRCF Temp_ADC_H, F, c
+    RRCF Temp_ADC_L, F, c
+
+    MOVF Temp_ADC_L, W, c
+    MOVWF Temp_C, c
+
+    MOVF Temp_C, W, c
+    MULLW 9
+
+    MOVF PRODL, W, c
+    MOVWF DivL, c
+
+    MOVF PRODH, W, c
+    MOVWF DivH, c
+
+    CLRF Cociente, c
+
+
+;=============================================================================
+; CONVERSIÓN A FAHRENHEIT
+;=============================================================================
+
+Division_Entre_5:
+    MOVLW 5
+    SUBWF DivL, F, c
+
+    MOVLW 0
+    SUBWFB DivH, F, c
+
+    BNC Fin_Division
+
+    INCF Cociente, F, c
+    GOTO Division_Entre_5
+
+Fin_Division:
+    MOVLW 32
+    ADDWF Cociente, W, c
+    MOVWF Temp_F, c
+
+    RETURN
+
+END resetVec
+
