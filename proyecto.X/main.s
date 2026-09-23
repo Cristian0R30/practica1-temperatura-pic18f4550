@@ -72,7 +72,7 @@ Inicio:
     BSF TRISB, 0, c
     BSF TRISB, 1, c
     BSF TRISB, 2, c
-    ; PORTC como salidas: RC0 (LED Alarma), RC1 (Ventilador), RC2 (D1), RC3 (D2)
+    ; PORTC como salidas: RC0 (LED Alarma), RC1 (Ventilador), RC2 (D1), RC6 (D2)
     CLRF TRISC, c
     CLRF LATC, c
     ; PORTD completo como salida (Segmentos a-g)
@@ -134,23 +134,41 @@ Inicio:
     CLRF Temp_F, c
     CLRF Seg_Dec, c
     CLRF Seg_Uni, c
-; --- BUCLE PRINCIPAL (MULTIPLEXADO DE DISPLAYS) ---
     
+; --- BUCLE PRINCIPAL (MULTIPLEXADO DE DISPLAYS) ---
     
 ;=============================================================================
 ; ADQUISICIÓN Y CONVERSIÓN DE TEMPERATURA
 ;=============================================================================
 
     CALL Adquirir_Temperatura
-
+    CALL Actualizar_Valor_Despliegue
+    
 Bucle_Principal:
     BTFSS Flags, 0, c
-    GOTO Bucle_Principal
+    GOTO Refrescar_Display
 
     BCF Flags, 0, c
     CALL Adquirir_Temperatura
-    GOTO Bucle_Principal
+    CALL Actualizar_Valor_Despliegue
+    
+Refrescar_Display:
 
+    ; Mostrar Display 1 (Decenas)
+    MOVF Seg_Dec, W, c
+    MOVWF LATD, c
+    BSF LATC, 2, c
+    BCF LATC, 6, c
+   
+
+    ; Mostrar Display 2 (Unidades)
+    MOVF Seg_Uni, W, c
+    MOVWF LATD, c
+    BCF LATC, 2, c
+    BSF LATC, 6, c
+
+
+    GOTO Bucle_Principal
 
 ;=============================================================================
 ; RUTINA DE INTERRUPCIÓN GENERAL (ISR)
@@ -170,16 +188,15 @@ Test_INT1:
     BCF INTCON3, 0, c       ; Limpiar bandera INT1IF
     BTG LATC, 1, c          ; Alternar estado del Ventilador
     RETFIE 1
-
 Test_INT2:
     ; --- Verificación de INT2 (Cambio de Escala °C / °F - RB2) ---
     BTFSS INTCON3, 1, c
     GOTO Test_TMR0
-    BCF INTCON3, 1, c       ; Limpiar bandera INT2IF
-    BTG Modo_Escala, 0, c   ; Alternar entre 0 (°C) y 1 (°F)
-    
-    RETFIE 1
+    BCF INTCON3, 1, c
+    BTG Modo_Escala, 0, c
+    CALL Actualizar_Valor_Despliegue
 
+    RETFIE 1 
 Test_TMR0:
     ; --- Verificación de Timer0 (Período de muestreo) ---
     BTFSS INTCON, 2, c
@@ -210,26 +227,21 @@ Espera_ADC:
 
     MOVF ADRESH, W, c
     MOVWF Temp_ADC_H, c
-
     MOVF ADRESL, W, c
     MOVWF Temp_ADC_L, c
 
     BCF STATUS, 0, c
     RRCF Temp_ADC_H, F, c
     RRCF Temp_ADC_L, F, c
-
     MOVF Temp_ADC_L, W, c
     MOVWF Temp_C, c
 
     MOVF Temp_C, W, c
     MULLW 9
-
     MOVF PRODL, W, c
     MOVWF DivL, c
-
     MOVF PRODH, W, c
     MOVWF DivH, c
-
     CLRF Cociente, c
 
 
@@ -240,12 +252,9 @@ Espera_ADC:
 Division_Entre_5:
     MOVLW 5
     SUBWF DivL, F, c
-
     MOVLW 0
     SUBWFB DivH, F, c
-
     BNC Fin_Division
-
     INCF Cociente, F, c
     GOTO Division_Entre_5
 
@@ -253,8 +262,67 @@ Fin_Division:
     MOVLW 32
     ADDWF Cociente, W, c
     MOVWF Temp_F, c
-
     RETURN
+;=============================================================================
+; PREPARACIÓN DEL VALOR PARA DESPLIEGUE
+;=============================================================================
+
+Actualizar_Valor_Despliegue:
+
+    BTFSS Modo_Escala, 0, c
+    GOTO Cargar_Celsius
+
+    MOVF Temp_F, W, c
+    MOVWF Temp_Disp, c
+    GOTO Descomponer_BCD
+
+Cargar_Celsius:
+    MOVF Temp_C, W, c
+    MOVWF Temp_Disp, c
+
+Descomponer_BCD:
+    MOVF Temp_Disp, W, c
+    MOVWF Temp_Val, c
+    CLRF Dig_Dec, c
+
+Bucle_Decenas:
+    MOVLW 10
+    SUBWF Temp_Val, W, c
+    BNC Fin_Decenas
+    MOVWF Temp_Val, c
+    INCF Dig_Dec, F, c
+    GOTO Bucle_Decenas
+
+Fin_Decenas:
+    MOVF Temp_Val, W, c
+    MOVWF Dig_Uni, c
+
+    CLRF TBLPTRU, c
+    MOVLW low(Tabla_7Seg)
+    MOVWF TBLPTRL, c
+    MOVLW high(Tabla_7Seg)
+    MOVWF TBLPTRH, c
+    MOVF Dig_Dec, W, c
+    ADDWF TBLPTRL, F, c
+    MOVLW 0
+    ADDWFC TBLPTRH, F, c
+    TBLRD*
+    MOVF TABLAT, W, c
+    MOVWF Seg_Dec, c
+
+    CLRF TBLPTRU, c
+    MOVLW low(Tabla_7Seg)
+    MOVWF TBLPTRL, c
+    MOVLW high(Tabla_7Seg)
+    MOVWF TBLPTRH, c
+    MOVF Dig_Uni, W, c
+    ADDWF TBLPTRL, F, c
+    MOVLW 0
+    ADDWFC TBLPTRH, F, c
+    TBLRD*
+    MOVF TABLAT, W, c
+    MOVWF Seg_Uni, c
+RETURN
+
 
 END resetVec
-
