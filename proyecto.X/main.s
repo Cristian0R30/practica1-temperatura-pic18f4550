@@ -32,15 +32,9 @@ DivL:           DS 1        ; Variable auxiliar para cálculo °F
 Cociente:       DS 1        ; Variable auxiliar división °F
 Retardo1:       DS 1        ; Retardo de multiplexado
 Retardo2:       DS 1        ; Retardo de multiplexado
+Estado_Termico: DS 1        ; Bit 0: 0 = Menor/igual a 30°C, 1 = Mayor a 30°C
 
-
-
-; --- VECTOR DE INTERRUPCIÓN DE ALTA PRIORIDAD (0x0008) ---
-PSECT isrVec, class=CODE, reloc=2
-ORG 0x0008
-; --- CÓDIGO PRINCIPAL ---
-PSECT main_code, class=CODE, reloc=2
-; --- VECTOR DE RESET ---
+; --- VECTOR DE RESET (0x0000) ---
 PSECT resetVec, class=CODE, reloc=2
 ORG 0x0000
 resetVec:
@@ -53,7 +47,6 @@ isrVec:
     GOTO ISR_General
 
 ; --- TABLA DE CARACTERES: DISPLAY 7 SEGMENTOS (CÁTODO COMÚN) ---
-; Patrones en orden 0-9: a, b, c, d, e, f, g (bits 0 a 6)
 PSECT const_data, class=CONST, reloc=2
 Tabla_7Seg:
     DB 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
@@ -66,56 +59,46 @@ Inicio:
     MOVWF OSCCON, c
 
     ; 2. Configuración de puertos de E/S
-    ; RA0 como entrada analógica (LM35)
-    BSF TRISA, 0, c
-    ; RB0, RB1, RB2 como entradas de interrupción
-    BSF TRISB, 0, c
-    BSF TRISB, 1, c
-    BSF TRISB, 2, c
-    ; PORTC como salidas: RC0 (LED Alarma), RC1 (Ventilador), RC2 (D1), RC6 (D2)
-    CLRF TRISC, c
+    BSF TRISA, 0, c         ; RA0 entrada analógica (LM35)
+    BSF TRISB, 0, c         ; RB0 (INT0)
+    BSF TRISB, 1, c         ; RB1 (INT1)
+    BSF TRISB, 2, c         ; RB2 (INT2)
+    CLRF TRISC, c           ; PORTC salidas: RC0 (LED Alarma), RC1 (Ventilador), RC2 (D1), RC6 (D2)
     CLRF LATC, c
-    ; PORTD completo como salida (Segmentos a-g)
-    CLRF TRISD, c
+    CLRF TRISD, c           ; PORTD salidas: Segmentos a-g
     CLRF LATD, c
+    CLRF Estado_Termico, c  ; Asumir inicialmente temperatura segura
 
     ; 3. Configuración de Resistencias Pull-Up en PORTB
     BCF INTCON2, 7, c       ; nRBPU = 0 (Pull-ups internos habilitados)
 
     ; 4. Configuración del Módulo ADC
-    ; ADCON1: AN0 como analógico, resto como digitales. Vref+ = VDD, Vref- = VSS
     MOVLW 0x0E
-    MOVWF ADCON1, c
-    ; ADCON2: Justificación a la derecha, 8 TAD de adquisición, Fosc/16
+    MOVWF ADCON1, c         ; AN0 analógico, resto digitales. Vref+ = VDD, Vref- = VSS
     MOVLW 0xA5
-    MOVWF ADCON2, c
-    ; ADCON0: Canal AN0 seleccionado, módulo ADC encendido
+    MOVWF ADCON2, c         ; Justificación derecha, 8 TAD de adquisición, Fosc/16
     MOVLW 0x01
-    MOVWF ADCON0, c
+    MOVWF ADCON0, c         ; Canal AN0 seleccionado, módulo ADC encendido
 
-    ; 5. Configuración del Timer0 (Temporizador de muestreo ~500 ms)
+    ; Configuración del Timer0 (Temporizador de muestreo ~500 ms)
     ; T0CON: 16 bits, reloj interno Fosc/4, prescaler 1:256, Timer0 encendido
     MOVLW 0x87
-    MOVWF T0CON, c
-    ; Precarga para 500 ms (0xF0BE)
+    MOVWF T0CON, c          ; 16 bits, reloj Fosc/4, prescaler 1:256, encendido
     MOVLW 0xF0
     MOVWF TMR0H, c
     MOVLW 0xBE
     MOVWF TMR0L, c
 
     ; 6. Configuración de Interrupciones
-    BCF RCON, 7, c          ; IPEN = 0 (Modo de compatibilidad / Sin prioridades)
-
-    ; Flancos de bajada para pulsadores (activo en bajo con pull-up)
+    BCF RCON, 7, c          ; IPEN = 0 (Sin prioridades)
     BCF INTCON2, 6, c       ; INTEDG0 = 0 (Flanco de bajada RB0)
     BCF INTCON2, 5, c       ; INTEDG1 = 0 (Flanco de bajada RB1)
     BCF INTCON2, 4, c       ; INTEDG2 = 0 (Flanco de bajada RB2)
 
-    ; Limpieza de banderas de interrupción
-    BCF INTCON, 1, c        ; INT0IF = 0
-    BCF INTCON3, 0, c       ; INT1IF = 0
-    BCF INTCON3, 1, c       ; INT2IF = 0
-    BCF INTCON, 2, c        ; TMR0IF = 0
+    BCF INTCON, 1, c        ; Limpiar banderas
+    BCF INTCON3, 0, c
+    BCF INTCON3, 1, c
+    BCF INTCON, 2, c
 
     ; Habilitación de interrupciones individuales
     BSF INTCON, 4, c        ; INT0IE = 1
@@ -134,7 +117,7 @@ Inicio:
     CLRF Temp_F, c
     CLRF Seg_Dec, c
     CLRF Seg_Uni, c
-    
+
 ; --- BUCLE PRINCIPAL (MULTIPLEXADO DE DISPLAYS) ---
     
 ;=============================================================================
@@ -143,7 +126,7 @@ Inicio:
 
     CALL Adquirir_Temperatura
     CALL Actualizar_Valor_Despliegue
-    
+
 Bucle_Principal:
     BTFSS Flags, 0, c
     GOTO Refrescar_Display
@@ -151,22 +134,24 @@ Bucle_Principal:
     BCF Flags, 0, c
     CALL Adquirir_Temperatura
     CALL Actualizar_Valor_Despliegue
-    
-Refrescar_Display:
 
+Refrescar_Display:
     ; Mostrar Display 1 (Decenas)
     MOVF Seg_Dec, W, c
     MOVWF LATD, c
-    BSF LATC, 2, c
-    BCF LATC, 6, c
-   
+    BSF LATC, 2, c          ; Encender Display Decenas
+    BCF LATC, 6, c          ; Apagar Display Unidades
+    CALL Retardo_3ms
 
     ; Mostrar Display 2 (Unidades)
     MOVF Seg_Uni, W, c
     MOVWF LATD, c
-    BCF LATC, 2, c
-    BSF LATC, 6, c
+    BCF LATC, 2, c          ; Apagar Display Decenas
+    BSF LATC, 6, c          ; Encender Display Unidades
+    CALL Retardo_3ms
 
+    BCF LATC, 2, c          ; Apagar ambos displays (evita ghosting)
+    BCF LATC, 6, c
 
     GOTO Bucle_Principal
 
@@ -188,21 +173,21 @@ Test_INT1:
     BCF INTCON3, 0, c       ; Limpiar bandera INT1IF
     BTG LATC, 1, c          ; Alternar estado del Ventilador
     RETFIE 1
+
 Test_INT2:
     ; --- Verificación de INT2 (Cambio de Escala °C / °F - RB2) ---
     BTFSS INTCON3, 1, c
     GOTO Test_TMR0
-    BCF INTCON3, 1, c
-    BTG Modo_Escala, 0, c
+    BCF INTCON3, 1, c       ; Limpiar bandera INT2IF
+    BTG Modo_Escala, 0, c   ; Alternar escala
     CALL Actualizar_Valor_Despliegue
-
     RETFIE 1 
+
 Test_TMR0:
     ; --- Verificación de Timer0 (Período de muestreo) ---
     BTFSS INTCON, 2, c
     GOTO Fin_ISR
     BCF INTCON, 2, c        ; Limpiar bandera TMR0IF
-    ; Recargar Timer0 para los siguientes 500 ms
     MOVLW 0xF0
     MOVWF TMR0H, c
     MOVLW 0xBE
@@ -212,15 +197,11 @@ Test_TMR0:
 Fin_ISR:
     RETFIE 1
 
-
 ;=============================================================================
 ; ADQUISICIÓN DE TEMPERATURA
 ;=============================================================================
-
 Adquirir_Temperatura:
-
-    BSF ADCON0, 1, c
-
+    BSF ADCON0, 1, c        ; GO/nDONE = 1
 Espera_ADC:
     BTFSC ADCON0, 1, c
     GOTO Espera_ADC
@@ -230,12 +211,17 @@ Espera_ADC:
     MOVF ADRESL, W, c
     MOVWF Temp_ADC_L, c
 
+    ; Temp_C = ADC >> 1
     BCF STATUS, 0, c
     RRCF Temp_ADC_H, F, c
     RRCF Temp_ADC_L, F, c
     MOVF Temp_ADC_L, W, c
     MOVWF Temp_C, c
 
+    ; --- COMPROBACIÓN DE UMBRAL (CORRECCIÓN CLAVE) ---
+    CALL Verificar_Umbral_30C
+
+    ; Conversión a Fahrenheit: F = (C * 9)/5 + 32
     MOVF Temp_C, W, c
     MULLW 9
     MOVF PRODL, W, c
@@ -243,11 +229,6 @@ Espera_ADC:
     MOVF PRODH, W, c
     MOVWF DivH, c
     CLRF Cociente, c
-
-
-;=============================================================================
-; CONVERSIÓN A FAHRENHEIT
-;=============================================================================
 
 Division_Entre_5:
     MOVLW 5
@@ -263,12 +244,11 @@ Fin_Division:
     ADDWF Cociente, W, c
     MOVWF Temp_F, c
     RETURN
-;=============================================================================
+
+
 ; PREPARACIÓN DEL VALOR PARA DESPLIEGUE
-;=============================================================================
 
 Actualizar_Valor_Despliegue:
-
     BTFSS Modo_Escala, 0, c
     GOTO Cargar_Celsius
 
@@ -297,6 +277,7 @@ Fin_Decenas:
     MOVF Temp_Val, W, c
     MOVWF Dig_Uni, c
 
+    ; Buscar patrón de Decena
     CLRF TBLPTRU, c
     MOVLW low(Tabla_7Seg)
     MOVWF TBLPTRL, c
@@ -310,6 +291,7 @@ Fin_Decenas:
     MOVF TABLAT, W, c
     MOVWF Seg_Dec, c
 
+    ; Buscar patrón de Unidad
     CLRF TBLPTRU, c
     MOVLW low(Tabla_7Seg)
     MOVWF TBLPTRL, c
@@ -322,7 +304,51 @@ Fin_Decenas:
     TBLRD*
     MOVF TABLAT, W, c
     MOVWF Seg_Uni, c
-RETURN
+    RETURN
 
+
+; CONTROL POR TRANSICIÓN TÉRMICA (PRIORIDAD AL USUARIO)
+
+Verificar_Umbral_30C:
+    MOVLW 30
+    CPFSGT Temp_C, c        ; ¿Temp_C > 30?
+    BRA Evaluar_Zona_Fria
+
+    ; Caso: Temperatura ACTUAL > 30 °C
+    BTFSC Estado_Termico, 0, c
+    RETURN                  ; Si ya estaba en > 30°C, respeta el pulsador
+
+    ; Transición de frío a caliente (Disparo de alarma):
+    BSF Estado_Termico, 0, c 
+    BSF LATC, 0, c          ; Encender LED Alarma (RC0)
+    BSF LATC, 1, c          ; Encender Ventilador (RC1)
+    RETURN
+
+Evaluar_Zona_Fria:
+    ; Caso: Temperatura ACTUAL <= 30 °C
+    BTFSS Estado_Termico, 0, c
+    RETURN                  ; Si ya estaba fría, respeta el pulsador
+
+    ; Transición de caliente a frío (Normalización):
+    BCF Estado_Termico, 0, c 
+    BCF LATC, 0, c          ; Apagar LED Alarma (RC0)
+    BCF LATC, 1, c          ; Apagar Ventilador (RC1)
+    RETURN
+
+
+;  (~3 ms a 8 MHz)
+
+Retardo_3ms:
+    MOVLW 10
+    MOVWF Retardo1, c
+Loop_Ext:
+    MOVLW 200
+    MOVWF Retardo2, c
+Loop_Int:
+    DECFSZ Retardo2, F, c
+    GOTO Loop_Int
+    DECFSZ Retardo1, F, c
+    GOTO Loop_Ext
+    RETURN
 
 END resetVec
